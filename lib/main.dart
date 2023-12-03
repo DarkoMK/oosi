@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui';
@@ -9,6 +8,7 @@ import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 import 'dart:async';
 import 'package:flutter_vision/flutter_vision.dart';
 import 'package:image_picker/image_picker.dart';
+import 'json_processing.dart';
 
 enum Options { none, imagev8, frame }
 
@@ -229,6 +229,9 @@ class _YoloVideoState extends State<YoloVideo> {
       setState(() {
         yoloResults = result;
       });
+      final sortedResults = JsonProcessing.sortDetections(result);
+      String jsonOutput = JsonProcessing.generateJson(sortedResults);
+      JsonProcessing.sendJsonToApi(jsonOutput);
     }
   }
 
@@ -382,8 +385,9 @@ class _YoloImageV8State extends State<YoloImageV8> {
       setState(() {
         yoloResults = result;
       });
-      final sortedResults = sortDetections(result);
-      String jsonOutput = generateJson(sortedResults);
+      final sortedResults = JsonProcessing.sortDetections(result);
+      String jsonOutput = JsonProcessing.generateJson(sortedResults);
+      JsonProcessing.sendJsonToApi(jsonOutput);
       showJsonDialog(jsonOutput);
     }
   }
@@ -422,61 +426,6 @@ class _YoloImageV8State extends State<YoloImageV8> {
         ),
       );
     }).toList();
-  }
-
-  Map<String, String> parseMarker(String label) {
-    final parts = label.split('_');
-    if (parts.length == 3) {
-      return {'color': parts[0].toLowerCase(), 'sign': 'ARROW_${parts[2]}'};
-    }
-    return {};
-  }
-
-  List<dynamic> processMarkers(List<Map<String, dynamic>> results) {
-    List<dynamic> jsonObjects = [];
-    Map<String, dynamic>? currentLoop;
-
-    for (var result in results) {
-      String label = result['tag'];
-
-      if (isLoopStart(label)) {
-        currentLoop = {
-          'loopsign': {'cycles': int.parse(label.split('_').last), 'children': <Map<String, dynamic>>[]}
-        };
-        continue;
-      }
-
-      if (isLoopEnd(label)) {
-        if (currentLoop != null) {
-          jsonObjects.add(currentLoop);
-          currentLoop = null;
-        }
-        continue;
-      }
-
-      var markerInfo = parseMarker(label);
-      if (markerInfo.isNotEmpty) {
-        if (currentLoop != null) {
-          currentLoop['loopsign']['children'].add({'singlesign': markerInfo});
-        } else {
-          jsonObjects.add({'singlesign': markerInfo});
-        }
-      }
-    }
-
-    return jsonObjects;
-  }
-
-  List<Map<String, dynamic>> sortDetections(List<Map<String, dynamic>> results) {
-    results.sort((a, b) {
-      return a['box'][1].compareTo(b['box'][1]); // Compare by the Y-coordinate
-    });
-    return results;
-  }
-
-  String generateJson(List<Map<String, dynamic>> results) {
-    final processedMarkers = processMarkers(results);
-    return jsonEncode(processedMarkers);
   }
 
   void showJsonDialog(String jsonOutput) {
